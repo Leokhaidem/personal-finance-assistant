@@ -3,6 +3,8 @@ from typing import List, Tuple
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import traceback
+import uuid
 
 from app.models.models import Document, Chunk, DocumentStatus
 from app.services.vector_service import get_vector_service
@@ -35,15 +37,20 @@ async def process_and_index_document(
     document_id: str,
     pdf_bytes: bytes
 ):
+    print(">>> Background task started")
     """Background task to extract PDF text, chunk, save DB records, and vector index."""
     stmt = select(Document).where(Document.id == document_id)
+    print(stmt)
     res = await db.execute(stmt)
     document = res.scalar_one_or_none()
     if not document:
         return
 
     try:
+        print("inside try")
         num_pages, text = extract_text_from_pdf(pdf_bytes)
+        print("after extract")
+        print(text)
         document.num_pages = num_pages
         
         if not text.strip():
@@ -59,18 +66,23 @@ async def process_and_index_document(
         metadatas = []
         
         for idx, chunk_str in enumerate(chunks_text):
-            chunk_db_id = f"doc_{document.id}_{idx}"
+            # Chroma vector ID
+            chroma_id = f"doc_{document.id}_{idx}"
+
+            # Database row
             chunk_row = Chunk(
-                id=chunk_db_id,
+                id=str(uuid.uuid4()),          # UUID for PostgreSQL
                 document_id=document.id,
                 user_id=document.user_id,
                 chunk_index=idx,
                 chunk_text=chunk_str,
-                embedding_id=chunk_db_id
+                embedding_id=chroma_id         # Chroma vector ID
             )
+
             db.add(chunk_row)
-            
-            ids.append(chunk_db_id)
+
+            # Store in Chroma
+            ids.append(chroma_id)
             texts.append(chunk_str)
             metadatas.append({
                 "user_id": document.user_id,
@@ -85,6 +97,11 @@ async def process_and_index_document(
         await db.commit()
 
     except Exception as exc:
+        await db.rollback()
+
         document.status = DocumentStatus.FAILED
+        db.add(document)
         await db.commit()
-        print(f"Error processing document {document_id}: {exc}")
+
+        print("========== DOCUMENT PROCESSING ERROR ==========")
+        traceback.print_exc()

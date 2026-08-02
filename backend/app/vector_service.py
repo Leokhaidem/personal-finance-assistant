@@ -62,22 +62,22 @@ class EmbeddingProvider(ABC):
         ...
 
 
-class OpenAIEmbeddingProvider(EmbeddingProvider):
-    name = "openai"
+# class OpenAIEmbeddingProvider(EmbeddingProvider):
+#     name = "openai"
 
-    def __init__(self, model: str = "text-embedding-3-small", api_key: str | None = None):
-        from openai import OpenAI
+#     def __init__(self, model: str = "text-embedding-3-small", api_key: str | None = None):
+#         from openai import OpenAI
 
-        key = api_key or os.environ.get("OPENAI_API_KEY")
-        if not key:
-            raise RuntimeError("OPENAI_API_KEY is not set.")
-        self.model = model
-        self._client = OpenAI(api_key=key)
+#         key = api_key or os.environ.get("OPENAI_API_KEY")
+#         if not key:
+#             raise RuntimeError("OPENAI_API_KEY is not set.")
+#         self.model = model
+#         self._client = OpenAI(api_key=key)
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        # Batched in one call; OpenAI preserves input order in response.data.
-        response = self._client.embeddings.create(model=self.model, input=texts)
-        return [item.embedding for item in response.data]
+#     def embed(self, texts: list[str]) -> list[list[float]]:
+#         # Batched in one call; OpenAI preserves input order in response.data.
+#         response = self._client.embeddings.create(model=self.model, input=texts)
+#         return [item.embedding for item in response.data]
 
 
 class GeminiEmbeddingProvider(EmbeddingProvider):
@@ -101,8 +101,8 @@ def get_embedding_provider(
     provider: Literal["openai", "gemini"] | None = None,
 ) -> EmbeddingProvider:
     provider = provider or os.environ.get("EMBEDDING_PROVIDER", "openai")
-    if provider == "openai":
-        return OpenAIEmbeddingProvider()
+    # if provider == "openai":
+    #     return OpenAIEmbeddingProvider()
     if provider == "gemini":
         return GeminiEmbeddingProvider()
     raise ValueError(f"Unknown embedding provider: {provider!r} (expected 'openai' or 'gemini')")

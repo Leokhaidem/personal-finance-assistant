@@ -112,7 +112,7 @@ async def call_gemini_llm(prompt: str) -> str:
 
     # Smart local fallback response if no API key provided or API error occurs
     return (
-        f"[Gemini Assistant Response]\n"
+        f"[Financial Assistant Response]\n"
         f"Based on your financial snapshot and records, here is an analysis of your request:\n"
         f"{prompt.split('=== USER QUESTION ===')[-1].strip()}\n\n"
         f"Key details reviewed:\n"
