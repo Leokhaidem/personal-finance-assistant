@@ -25,7 +25,7 @@ export const DocumentsPage = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!file.name.toLowerCase().endswith('.pdf')) {
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
       setError('Only PDF files are supported for automated statement/policy scanning.');
       return;
     }
