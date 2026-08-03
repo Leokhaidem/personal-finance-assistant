@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
-  LayoutDashboard, FileText, CreditCard, PieChart, Target, 
+  LayoutDashboard, Landmark, FileText, CreditCard, PieChart, Target, 
   Calendar, StickyNote, MessageSquare, Shield, LogOut, Wallet
 } from 'lucide-react';
 
@@ -25,6 +25,11 @@ export const Sidebar = () => {
         <NavLink to="/" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <LayoutDashboard size={18} />
           <span>Dashboard</span>
+        </NavLink>
+
+        <NavLink to="/accounts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Landmark size={18} />
+          <span>Accounts</span>
         </NavLink>
 
         <NavLink to="/documents" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
