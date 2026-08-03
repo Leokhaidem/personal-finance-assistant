@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.security import (
     get_password_hash, verify_password, create_access_token, create_refresh_token, get_current_user
 )
-from app.models.models import User, RefreshToken
+from app.models.models import User, RefreshToken, Account, AccountType
 from app.schemas.schemas import UserRegister, UserLogin, TokenResponse, UserResponse, RefreshTokenRequest
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -30,6 +30,15 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+
+    # Create default accounts for new user
+    default_accounts = [
+        Account(user_id=new_user.id, name="Primary Bank Account", type=AccountType.BANK, balance=0.0),
+        Account(user_id=new_user.id, name="Cash Wallet", type=AccountType.CASH, balance=0.0)
+    ]
+    db.add_all(default_accounts)
+    await db.commit()
+
     return new_user
 
 @router.post("/login", response_model=TokenResponse)

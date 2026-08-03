@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
-import { Plus, Filter, Trash2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Plus, Filter, Trash2, ArrowUpRight, ArrowDownLeft, Landmark } from 'lucide-react';
 
 export const TransactionsPage = () => {
   const [transactions, setTransactions] = useState([]);
@@ -9,7 +9,13 @@ export const TransactionsPage = () => {
   const [typeFilter, setTypeFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
 
-  // Form states
+  // Quick account creation inside modal
+  const [showAccountForm, setShowAccountForm] = useState(false);
+  const [newAccName, setNewAccName] = useState('');
+  const [newAccType, setNewAccType] = useState('bank');
+  const [newAccBalance, setNewAccBalance] = useState('0');
+
+  // Transaction form states
   const [accountId, setAccountId] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Food & Dining');
@@ -41,8 +47,32 @@ export const TransactionsPage = () => {
     fetchData();
   }, [categoryFilter, typeFilter]);
 
+  const handleCreateAccountInline = async (e) => {
+    e.preventDefault();
+    if (!newAccName.trim()) return;
+    try {
+      const res = await apiClient.post('/accounts', {
+        name: newAccName,
+        type: newAccType,
+        balance: parseFloat(newAccBalance || 0)
+      });
+      const updatedAccs = [...accounts, res.data];
+      setAccounts(updatedAccs);
+      setAccountId(res.data.id);
+      setShowAccountForm(false);
+      setNewAccName('');
+      setNewAccBalance('0');
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to create account');
+    }
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (!accountId) {
+      alert('Please select or create an account first.');
+      return;
+    }
     try {
       await apiClient.post('/transactions', {
         account_id: accountId,
@@ -80,7 +110,7 @@ export const TransactionsPage = () => {
             Record and categorize your income and expense transactions.
           </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn btn-primary">
+        <button onClick={() => { setShowAccountForm(false); setShowModal(true); }} className="btn btn-primary">
           <Plus size={18} /> Add Transaction
         </button>
       </div>
@@ -168,16 +198,72 @@ export const TransactionsPage = () => {
         <div className="modal-backdrop">
           <div className="modal-content">
             <h3 style={{ marginBottom: '1.25rem' }}>Record New Transaction</h3>
-            <form onSubmit={handleCreate}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.3rem' }}>Account</label>
+
+            {/* Account selection / Inline Creation */}
+            <div style={{ marginBottom: '1.25rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Account</label>
+                <button
+                  type="button"
+                  onClick={() => setShowAccountForm(!showAccountForm)}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                >
+                  <Plus size={12} /> {showAccountForm ? 'Cancel New Account' : '+ Add New Account'}
+                </button>
+              </div>
+
+              {showAccountForm || accounts.length === 0 ? (
+                <div style={{ marginTop: '0.75rem' }}>
+                  {accounts.length === 0 && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--accent-warning)', marginBottom: '0.75rem' }}>
+                      ⚠️ No accounts found. Please create an account below first:
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Account Name (e.g. SBI Bank)"
+                      value={newAccName}
+                      onChange={(e) => setNewAccName(e.target.value)}
+                    />
+                    <select className="input-field" value={newAccType} onChange={(e) => setNewAccType(e.target.value)}>
+                      <option value="bank">Bank Account</option>
+                      <option value="credit_card">Credit Card</option>
+                      <option value="cash">Cash Wallet</option>
+                      <option value="investment">Investment</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input-field"
+                      placeholder="Initial Balance (₹)"
+                      value={newAccBalance}
+                      onChange={(e) => setNewAccBalance(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateAccountInline}
+                      className="btn btn-primary"
+                      style={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}
+                    >
+                      <Landmark size={14} /> Create Account
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <select className="input-field" value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.name} (₹{a.balance.toLocaleString()})</option>
                   ))}
                 </select>
-              </div>
+              )}
+            </div>
 
+            <form onSubmit={handleCreate}>
               <div className="grid-2" style={{ marginBottom: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.3rem' }}>Type</label>
@@ -210,7 +296,7 @@ export const TransactionsPage = () => {
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary">Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Transaction</button>
+                <button type="submit" className="btn btn-primary" disabled={accounts.length === 0}>Save Transaction</button>
               </div>
             </form>
           </div>
