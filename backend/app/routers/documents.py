@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.models import User, Document, DocumentStatus
-from app.schemas.schemas import DocumentResponse
+from app.schemas.schemas import DocumentResponse, ExtractedTransactionItem, ConfirmTransactionsRequest, ConfirmTransactionsResponse
 from app.services.document_service import process_and_index_document
 from app.services.vector_service import get_vector_service
+from app.services.statement_parser import extract_transactions_from_pdf_bytes, confirm_and_save_transactions
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -43,6 +44,48 @@ async def upload_document(
 
     return doc
 
+@router.post("/parse-pdf-direct", response_model=List[ExtractedTransactionItem])
+async def parse_pdf_direct(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    transactions = await extract_transactions_from_pdf_bytes(content)
+    return transactions
+
+@router.post("/confirm-transactions", response_model=ConfirmTransactionsResponse)
+async def confirm_transactions(
+    req: ConfirmTransactionsRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="No transactions provided to import.")
+
+    raw_list = [t.model_dump() for t in req.transactions]
+    try:
+        imported_count, acc = await confirm_and_save_transactions(
+            db=db,
+            user_id=current_user.id,
+            account_id=req.account_id,
+            transactions_list=raw_list
+        )
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+
+    return ConfirmTransactionsResponse(
+        imported_count=imported_count,
+        account_id=acc.id,
+        account_name=acc.name,
+        new_balance=acc.balance
+    )
+
 @router.get("", response_model=List[DocumentResponse])
 async def list_documents(
     current_user: User = Depends(get_current_user),
@@ -70,3 +113,4 @@ async def delete_document(
     await db.delete(doc)
     await db.commit()
     return None
+
