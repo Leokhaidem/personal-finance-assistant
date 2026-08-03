@@ -40,6 +40,9 @@ Thumbs.db
 # ======================
 *.pyo
 *.pyd
+__pycache__/
+*.py[cod]
+*.pyo
 
 # ======================
 # Environment
