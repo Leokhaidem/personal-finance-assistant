@@ -1,24 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
-import { Upload, FileText, Trash2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { Upload, FileText, Trash2, CheckCircle, Clock, AlertCircle, RefreshCw, Sparkles, Landmark, Check, X, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 
 export const DocumentsPage = () => {
   const [documents, setDocuments] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const fetchDocuments = async () => {
+  // Target Account selection for statement extraction
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+
+  // Preview & Confirm Modal states
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [extractedTxs, setExtractedTxs] = useState([]);
+  const [selectedTxIndexes, setSelectedTxIndexes] = useState({});
+  const [importing, setImporting] = useState(false);
+
+  const fetchData = async () => {
     try {
-      const res = await apiClient.get('/documents');
-      setDocuments(res.data);
+      const [docsRes, accsRes] = await Promise.all([
+        apiClient.get('/documents'),
+        apiClient.get('/accounts')
+      ]);
+      setDocuments(docsRes.data);
+      setAccounts(accsRes.data);
+      if (accsRes.data.length > 0 && !selectedAccountId) {
+        setSelectedAccountId(accsRes.data[0].id);
+      }
     } catch (err) {
-      console.error('Failed to fetch documents:', err);
+      console.error('Failed to fetch page data:', err);
     }
   };
 
   useEffect(() => {
-    fetchDocuments();
+    fetchData();
   }, []);
 
   const handleFileUpload = async (e) => {
@@ -26,7 +44,7 @@ export const DocumentsPage = () => {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Only PDF files are supported for automated statement/policy scanning.');
+      setError('Only PDF files are supported.');
       return;
     }
 
@@ -42,7 +60,7 @@ export const DocumentsPage = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setSuccessMsg(`Document "${file.name}" uploaded successfully! PyMuPDF text extraction & vector indexing in progress.`);
-      fetchDocuments();
+      fetchData();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to upload PDF document.');
     } finally {
@@ -50,26 +68,118 @@ export const DocumentsPage = () => {
     }
   };
 
+  const handleStatementExtractUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Only PDF bank/credit card statements are supported.');
+      return;
+    }
+
+    if (!selectedAccountId) {
+      setError('Please select a target account to link extracted transactions.');
+      return;
+    }
+
+    setError('');
+    setSuccessMsg('');
+    setParsing(true);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // 1. Upload for document storage & RAG
+      apiClient.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).catch(() => {});
+
+      // 2. Parse transactions semantically via Gemini AI
+      const res = await apiClient.post('/documents/parse-pdf-direct', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (!res.data || res.data.length === 0) {
+        setError('No transaction entries could be extracted from this PDF. Please check the document or format.');
+      } else {
+        setExtractedTxs(res.data);
+        // Default select all transactions
+        const initialSelected = {};
+        res.data.forEach((_, idx) => { initialSelected[idx] = true; });
+        setSelectedTxIndexes(initialSelected);
+        setShowPreviewModal(true);
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to parse statement PDF using AI.');
+    } finally {
+      setParsing(false);
+      e.target.value = '';
+    }
+  };
+
+  const toggleSelectTx = (index) => {
+    setSelectedTxIndexes((prev) => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+
+  const toggleSelectAll = () => {
+    const allSelected = Object.keys(selectedTxIndexes).length === extractedTxs.length && Object.values(selectedTxIndexes).every(Boolean);
+    const newSelected = {};
+    extractedTxs.forEach((_, idx) => {
+      newSelected[idx] = !allSelected;
+    });
+    setSelectedTxIndexes(newSelected);
+  };
+
+  const handleConfirmImport = async () => {
+    const approvedTransactions = extractedTxs.filter((_, idx) => selectedTxIndexes[idx]);
+    if (approvedTransactions.length === 0) {
+      alert('Please select at least one transaction to import.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const targetAcc = accounts.find((a) => a.id === selectedAccountId);
+      const res = await apiClient.post('/documents/confirm-transactions', {
+        account_id: selectedAccountId,
+        transactions: approvedTransactions
+      });
+
+      setShowPreviewModal(false);
+      setSuccessMsg(`Successfully imported ${res.data.imported_count} transaction(s) into "${res.data.account_name}". Updated Balance: ₹${res.data.new_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.`);
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to import transactions.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this document and remove its indexed vector chunks?')) return;
     try {
       await apiClient.delete(`/documents/${id}`);
-      fetchDocuments();
+      fetchData();
     } catch (err) {
       console.error('Failed to delete document:', err);
     }
   };
 
+  const selectedCount = Object.values(selectedTxIndexes).filter(Boolean).length;
+  const targetAccountObj = accounts.find((a) => a.id === selectedAccountId);
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Financial Documents & Statements</h1>
+          <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Financial Documents & Statement Extractor</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            Upload PDF bank statements, insurance policies, tax notes & bill receipts for automated text extraction & RAG indexing.
+            Upload PDF bank statements, credit card bills & receipts for automated AI transaction extraction & RAG indexing.
           </p>
         </div>
-        <button onClick={fetchDocuments} className="btn btn-secondary">
+        <button onClick={fetchData} className="btn btn-secondary">
           <RefreshCw size={16} /> Refresh Status
         </button>
       </div>
@@ -86,24 +196,71 @@ export const DocumentsPage = () => {
         </div>
       )}
 
-      {/* File Upload Box */}
-      <div className="glass-card" style={{ border: '2px dashed var(--border-glow)', textAlign: 'center', padding: '2.5rem', marginBottom: '2rem', cursor: 'pointer', position: 'relative' }}>
-        <input
-          type="file"
-          accept=".pdf"
-          onChange={handleFileUpload}
-          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-          disabled={uploading}
-        />
-        <div style={{ display: 'inline-flex', background: 'rgba(99,102,241,0.15)', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
-          <Upload size={36} color="var(--accent-primary)" />
+      {/* Target Account Link Bar */}
+      <div className="glass-card" style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Landmark size={20} color="var(--accent-primary)" />
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>Target Account for PDF Statement Import:</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <select
+              className="input-field"
+              style={{ width: '260px' }}
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+            >
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({acc.type.toUpperCase()} - ₹{acc.balance.toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <h3 style={{ fontSize: '1.15rem', marginBottom: '0.4rem' }}>
-          {uploading ? 'Processing PDF & Extracting Text...' : 'Click or Drag & Drop PDF Document'}
-        </h3>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-          Supports PDF Bank Statements, Policy Terms, Tax Documents (up to 50MB)
-        </p>
+      </div>
+
+      {/* File Upload Grid */}
+      <div className="grid-2" style={{ marginBottom: '2rem' }}>
+        {/* Statement Transaction Extractor Box */}
+        <div className="glass-card" style={{ border: '2px dashed var(--accent-primary)', textAlign: 'center', padding: '2rem', position: 'relative', background: 'rgba(99,102,241,0.03)' }}>
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={handleStatementExtractUpload}
+            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+            disabled={parsing}
+          />
+          <div style={{ display: 'inline-flex', background: 'rgba(99,102,241,0.15)', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
+            <Sparkles size={32} color="var(--accent-primary)" />
+          </div>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.4rem', color: '#fff' }}>
+            {parsing ? 'Scanning PDF & Extracting Transactions via Gemini AI...' : 'Extract Transactions from PDF Statement'}
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            Upload Bank / Credit Card PDF statement. Includes AI semantic extraction for scanned or non-standard PDFs.
+          </p>
+        </div>
+
+        {/* General Document RAG Upload Box */}
+        <div className="glass-card" style={{ border: '2px dashed var(--border-glow)', textAlign: 'center', padding: '2rem', position: 'relative' }}>
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={handleFileUpload}
+            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+            disabled={uploading}
+          />
+          <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
+            <Upload size={32} color="var(--text-secondary)" />
+          </div>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.4rem' }}>
+            {uploading ? 'Processing PDF & Extracting Text...' : 'Upload General RAG Document'}
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            Upload Insurance Terms, Tax Notes, or Receipt PDFs for AI Chat memory & vector search.
+          </p>
+        </div>
       </div>
 
       {/* Document List */}
@@ -172,6 +329,93 @@ export const DocumentsPage = () => {
           </div>
         )}
       </div>
+
+      {/* Preview & Confirm Transactions Modal */}
+      {showPreviewModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '850px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>
+                  Preview Extracted Transactions
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Target Account: <strong style={{ color: '#fff' }}>{targetAccountObj?.name || 'Selected Account'}</strong>
+                </p>
+              </div>
+              <button onClick={() => setShowPreviewModal(false)} className="btn btn-secondary" style={{ padding: '0.35rem 0.5rem' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '8px' }}>
+              <button type="button" onClick={toggleSelectAll} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}>
+                {Object.values(selectedTxIndexes).every(Boolean) ? 'Deselect All' : 'Select All'}
+              </button>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {selectedCount} of {extractedTxs.length} selected for import
+              </div>
+            </div>
+
+            <div style={{ maxHeight: '360px', overflowY: 'auto', marginBottom: '1.5rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary)', zIndex: 1 }}>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                    <th style={{ padding: '0.6rem 0.75rem', width: '40px' }}>Import</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Date</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Description</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Category</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Type</th>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {extractedTxs.map((tx, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', background: selectedTxIndexes[idx] ? 'rgba(99,102,241,0.05)' : 'transparent' }}>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!selectedTxIndexes[idx]}
+                          onChange={() => toggleSelectTx(idx)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </td>
+                      <td style={{ padding: '0.6rem 0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{tx.date}</td>
+                      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 500 }}>{tx.description}</td>
+                      <td style={{ padding: '0.6rem 0.75rem' }}>
+                        <span className="badge badge-info">{tx.category}</span>
+                      </td>
+                      <td style={{ padding: '0.6rem 0.75rem' }}>
+                        {tx.type === 'income' ? (
+                          <span className="badge badge-success" style={{ gap: '4px' }}>
+                            <ArrowUpRight size={12} /> Income
+                          </span>
+                        ) : (
+                          <span className="badge badge-warning" style={{ gap: '4px' }}>
+                            <ArrowDownLeft size={12} /> Expense
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontWeight: 700, color: tx.type === 'income' ? 'var(--accent-success)' : '#fff' }}>
+                        {tx.type === 'income' ? '+' : '-'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setShowPreviewModal(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button type="button" onClick={handleConfirmImport} className="btn btn-primary" disabled={importing || selectedCount === 0}>
+                {importing ? 'Importing Transactions...' : `Confirm & Import ${selectedCount} Transaction(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -240,3 +240,22 @@ class GoalFeasibilityResponse(BaseModel):
     current_avg_savings_rate: float
     is_feasible: bool
     ai_explanation: str
+
+# --- PDF Statement Extraction Schemas ---
+class ExtractedTransactionItem(BaseModel):
+    date: str
+    description: str
+    amount: float = Field(..., gt=0)
+    type: TransactionType = TransactionType.EXPENSE
+    category: str = "Uncategorized"
+
+class ConfirmTransactionsRequest(BaseModel):
+    account_id: str
+    transactions: List[ExtractedTransactionItem]
+
+class ConfirmTransactionsResponse(BaseModel):
+    imported_count: int
+    account_id: str
+    account_name: str
+    new_balance: float
+
