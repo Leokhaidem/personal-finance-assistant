@@ -6,11 +6,13 @@ import {
   Calendar, StickyNote, MessageSquare, Shield, LogOut, Wallet
 } from 'lucide-react';
 
-export const Sidebar = () => {
+// export const Sidebar = () => {
+  export const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   const { user, logout } = useAuth();
 
   return (
-    <aside className="sidebar">
+    // <aside className="sidebar">
+    <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', padding: '0 0.5rem' }}>
         <div style={{ background: 'linear-gradient(135deg, #6366f1, #ec4899)', padding: '0.5rem', borderRadius: '10px' }}>
           <Wallet size={24} color="#fff" />
