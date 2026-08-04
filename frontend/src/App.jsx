@@ -1,4 +1,5 @@
-import React from 'react';
+// import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sidebar } from './components/Sidebar';
@@ -18,6 +19,7 @@ import { AdminPage } from './pages/AdminPage';
 
 const ProtectedLayout = () => {
   const { user, loading } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);   //added this line to manage sidebar state
 
   if (loading) {
     return <div style={{ color: '#fff', padding: '2rem' }}>Loading application...</div>;
@@ -27,10 +29,35 @@ const ProtectedLayout = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return (
+  // return (
+    // <div className="app-container">
+    //   <Sidebar />
+    //   <main className="main-content">
+    return (
     <div className="app-container">
-      <Sidebar />
-      <main className="main-content">
+
+    {!sidebarOpen && (
+    <button
+      className="menu-btn"
+      onClick={() => setSidebarOpen(true)}
+    >
+    ☰
+    </button> 
+)}
+
+    {/* <Sidebar /> */}
+    <Sidebar
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+    />
+
+      {sidebarOpen && (
+      <div
+        className="sidebar-overlay"
+        onClick={() => setSidebarOpen(false)}
+      />
+    )}
+    <main className="main-content">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
