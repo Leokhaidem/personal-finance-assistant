@@ -6,9 +6,9 @@ import {
   User,
   Sparkles,
   FileText,
-  Target,
-  CreditCard,
-  ShieldAlert,
+  Trash2,
+  RefreshCw,
+  MessageSquare
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,18 +19,39 @@ export const ChatPage = () => {
       id: "welcome",
       role: "assistant",
       content:
-        "Hello! I am your personal finance RAG assistant powered by Gemini 3 Flash. I analyze your account balances, monthly budgets, upcoming bills, goals, and uploaded PDF documents/notes to provide grounded recommendations. How can I assist you today?",
+        "Hello! I am your personal finance assistant powered by Google Gemini AI. I analyze your account balances, monthly budgets, upcoming bills, goals, and uploaded PDF documents/notes to provide grounded recommendations. How can I assist you today?",
       citations: [],
     },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState(null);
+  const [conversations, setConversations] = useState([]);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const loadConversations = async () => {
+    try {
+      const res = await apiClient.get("/chat/conversations");
+      if (res.data && res.data.length > 0) {
+        setConversations(res.data);
+        const latest = res.data[0];
+        setConversationId(latest.id);
+        if (latest.messages && latest.messages.length > 0) {
+          setMessages(latest.messages);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load chat history from database:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -75,6 +96,31 @@ export const ChatPage = () => {
     }
   };
 
+  const handleNewChat = () => {
+    setConversationId(null);
+    setMessages([
+      {
+        id: "welcome",
+        role: "assistant",
+        content:
+          "Started a new conversation session. Ask me anything about your budgets, income, goals, or uploaded financial documents!",
+        citations: [],
+      },
+    ]);
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!conversationId) return;
+    if (!window.confirm("Clear this conversation history from database?")) return;
+    try {
+      await apiClient.delete(`/chat/conversations/${conversationId}`);
+      handleNewChat();
+      loadConversations();
+    } catch (err) {
+      console.error("Failed to delete conversation:", err);
+    }
+  };
+
   const suggestions = [
     "Can I afford a ₹50,000 vacation next month given my budgets & goals?",
     "Summarize my total monthly income vs expenses and savings rate.",
@@ -90,14 +136,25 @@ export const ChatPage = () => {
         flexDirection: "column",
       }}
     >
-      <div style={{ marginBottom: "1rem" }}>
-        <h1 style={{ fontSize: "1.75rem", marginBottom: "0.25rem" }}>
-          AI Financial Assistant
-        </h1>
-        <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-          Grounded RAG retrieval combining structured SQL records with ChromaDB
-          document & note embeddings.
-        </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+        <div>
+          <h1 style={{ fontSize: "1.75rem", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Sparkles size={26} color="var(--accent-primary)" /> AI Financial Assistant
+          </h1>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            Powered by Google Gemini models & grounded RAG context stored permanently in PostgreSQL database.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button onClick={handleNewChat} className="btn btn-secondary" style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}>
+            <RefreshCw size={14} /> New Session
+          </button>
+          {conversationId && (
+            <button onClick={handleDeleteConversation} className="btn btn-danger" style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}>
+              <Trash2 size={14} /> Clear History
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Suggestion Chips */}
@@ -139,7 +196,7 @@ export const ChatPage = () => {
         <div style={{ flex: 1, overflowY: "auto", paddingRight: "0.5rem" }}>
           {messages.map((msg) => (
             <div
-              key={msg.id}
+              key={msg.id || `msg-${Math.random()}`}
               style={{
                 display: "flex",
                 gap: "0.85rem",
@@ -171,7 +228,7 @@ export const ChatPage = () => {
 
               <div
                 style={{
-                  maxWidth: "75%",
+                  maxWidth: "78%",
                   background:
                     msg.role === "user"
                       ? "rgba(99,102,241,0.2)"
@@ -183,9 +240,6 @@ export const ChatPage = () => {
                   color: "#f3f4f6",
                 }}
               >
-                {/* <div style={{ whiteSpace: "pre-line", lineHeight: "1.6" }}>
-                  {msg.content}
-                </div> */}
                 <div className="markdown-body">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {msg.content}
@@ -259,8 +313,7 @@ export const ChatPage = () => {
                   fontSize: "0.9rem",
                 }}
               >
-                Gemini 3 Flash is fetching SQL snapshot + vector ChromaDB
-                context...
+                Gemini AI is analyzing financial SQL snapshot & ChromaDB vector context...
               </div>
             </div>
           )}

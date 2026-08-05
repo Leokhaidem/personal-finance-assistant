@@ -1,39 +1,94 @@
 from datetime import datetime, date
-from typing import Dict, Any, List
-from sqlalchemy import select, func, and_
+from typing import Dict, Any, List, Optional
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Transaction, Account, Budget, Goal, Bill, TransactionType
 from app.schemas.schemas import DashboardSummaryResponse, CategoryExpense, TrendPoint, GoalResponse
 
-async def compute_dashboard_summary(db: AsyncSession, user_id: str) -> DashboardSummaryResponse:
+async def compute_dashboard_summary(db: AsyncSession, user_id: str, month: Optional[str] = None) -> DashboardSummaryResponse:
     today = date.today()
-    current_month_str = today.strftime("%Y-%m")
     
     # 1. Accounts total savings / balance
     acc_stmt = select(func.coalesce(func.sum(Account.balance), 0.0)).where(Account.user_id == user_id)
     acc_res = await db.execute(acc_stmt)
     total_savings = float(acc_res.scalar_one() or 0.0)
 
-    # 2. Current month income and expenses
-    # Start of current month
-    first_day_of_month = date(today.year, today.month, 1)
+    # 2. Fetch all available transaction months for user
+    dates_stmt = select(Transaction.date).where(Transaction.user_id == user_id).order_by(Transaction.date.desc())
+    dates_res = await db.execute(dates_stmt)
+    all_dates = dates_res.scalars().all()
     
+    avail_months_set = set()
+    for d in all_dates:
+        if d:
+            avail_months_set.add(f"{d.year:04d}-{d.month:02d}")
+    
+    current_month_str = f"{today.year:04d}-{today.month:02d}"
+    avail_months_set.add(current_month_str)
+    available_months = sorted(list(avail_months_set), reverse=True)
+
+    # Determine target active month for summary
+    if month and len(month.split('-')) == 2:
+        try:
+            m_year, m_mon = map(int, month.split('-'))
+            first_day_of_month = date(m_year, m_mon, 1)
+        except ValueError:
+            first_day_of_month = date(today.year, today.month, 1)
+    else:
+        first_day_of_month = date(today.year, today.month, 1)
+
+    active_month_str = f"{first_day_of_month.year:04d}-{first_day_of_month.month:02d}"
+    active_month_label = first_day_of_month.strftime("%B %Y")
+    
+    if first_day_of_month.month == 12:
+        end_of_active_month = date(first_day_of_month.year + 1, 1, 1)
+    else:
+        end_of_active_month = date(first_day_of_month.year, first_day_of_month.month + 1, 1)
+
     inc_stmt = select(func.coalesce(func.sum(Transaction.amount), 0.0)).where(
         and_(
             Transaction.user_id == user_id,
             Transaction.type == TransactionType.INCOME,
-            Transaction.date >= first_day_of_month
+            Transaction.date >= first_day_of_month,
+            Transaction.date < end_of_active_month
         )
     )
     inc_res = await db.execute(inc_stmt)
     monthly_income = float(inc_res.scalar_one() or 0.0)
 
+    # Salary Income calculation (Income category or description containing Salary/Payroll/Stipend/Credit/Deposit)
+    sal_stmt = select(func.coalesce(func.sum(Transaction.amount), 0.0)).where(
+        and_(
+            Transaction.user_id == user_id,
+            Transaction.type == TransactionType.INCOME,
+            Transaction.date >= first_day_of_month,
+            Transaction.date < end_of_active_month,
+            or_(
+                func.lower(Transaction.category).in_(["income", "salary", "paycheck"]),
+                func.lower(Transaction.description).like("%salary%"),
+                func.lower(Transaction.description).like("%payroll%"),
+                func.lower(Transaction.description).like("%stipend%"),
+                func.lower(Transaction.description).like("%credit%"),
+                func.lower(Transaction.description).like("%deposit%"),
+                func.lower(Transaction.description).like("%neft%"),
+                func.lower(Transaction.description).like("%imps%"),
+                func.lower(Transaction.description).like("%transfer%")
+            )
+        )
+    )
+    sal_res = await db.execute(sal_stmt)
+    salary_income = float(sal_res.scalar_one() or 0.0)
+    # If no specific salary keyword matched but income exists, set salary_income to monthly_income
+    if salary_income == 0.0 and monthly_income > 0.0:
+        salary_income = monthly_income
+
     exp_stmt = select(func.coalesce(func.sum(Transaction.amount), 0.0)).where(
         and_(
             Transaction.user_id == user_id,
             Transaction.type == TransactionType.EXPENSE,
-            Transaction.date >= first_day_of_month
+            Transaction.date >= first_day_of_month,
+            Transaction.date < end_of_active_month
         )
     )
     exp_res = await db.execute(exp_stmt)
@@ -52,7 +107,8 @@ async def compute_dashboard_summary(db: AsyncSession, user_id: str) -> Dashboard
         and_(
             Transaction.user_id == user_id,
             Transaction.type == TransactionType.EXPENSE,
-            Transaction.date >= first_day_of_month
+            Transaction.date >= first_day_of_month,
+            Transaction.date < end_of_active_month
         )
     ).group_by(Transaction.category)
     cat_res = await db.execute(cat_stmt)
@@ -98,10 +154,8 @@ async def compute_dashboard_summary(db: AsyncSession, user_id: str) -> Dashboard
     upcoming_bills_count = int(bill_res.scalar_one() or 0)
 
     # 6. Income vs Expense trend (last 6 months)
-    # Generate past 6 month strings
     trend_points: List[TrendPoint] = []
     for i in range(5, -1, -1):
-        # Calculate year and month for (today - i months)
         m = today.month - i
         y = today.year
         while m <= 0:
@@ -149,6 +203,10 @@ async def compute_dashboard_summary(db: AsyncSession, user_id: str) -> Dashboard
     return DashboardSummaryResponse(
         monthly_income=monthly_income,
         monthly_expenses=monthly_expenses,
+        salary_income=salary_income,
+        active_month_label=active_month_label,
+        active_month=active_month_str,
+        available_months=available_months,
         total_savings=total_savings,
         savings_rate=savings_rate,
         emergency_fund_progress=emergency_fund_progress,

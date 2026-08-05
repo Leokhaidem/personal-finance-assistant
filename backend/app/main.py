@@ -6,6 +6,10 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.database import engine, Base
+
+# Import models so SQLAlchemy registers all tables
+from app.models.models import *
+
 from app.routers import (
     auth, documents, accounts, transactions, budgets, goals, bills, notes, dashboard, chat, admin
 )
@@ -18,6 +22,7 @@ async def lifespan(app: FastAPI):
     # Initialize DB tables on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
     logger.info("Database tables initialized successfully.")
     yield
 
@@ -28,7 +33,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,16 +41,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Exception handlers
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception on {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": str(exc), "path": str(request.url.path)}
+        content={
+            "detail": str(exc),
+            "path": str(request.url.path)
+        }
     )
 
-# Include routers
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(accounts.router)
@@ -59,9 +64,21 @@ app.include_router(dashboard.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
 
+@app.get("/")
+async def root():
+    return {
+        "message": f"Welcome to {settings.PROJECT_NAME} API",
+        "docs": "/docs",
+        "health": "/health",
+        "status": "online"
+    }
+
 @app.get("/health")
 async def health():
-    return {"status": "ok", "app": settings.PROJECT_NAME}
+    return {
+        "status": "ok",
+        "app": settings.PROJECT_NAME
+    }
 
 if __name__ == "__main__":
     import uvicorn

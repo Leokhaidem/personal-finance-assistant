@@ -166,6 +166,7 @@ class DocumentResponse(BaseModel):
     num_pages: int
     status: DocumentStatus
     created_at: datetime
+    extracted_transactions: List[ExtractedTransactionItem] = []
 
     class Config:
         from_attributes = True
@@ -204,6 +205,10 @@ class TrendPoint(BaseModel):
 class DashboardSummaryResponse(BaseModel):
     monthly_income: float
     monthly_expenses: float
+    salary_income: float = 0.0
+    active_month_label: Optional[str] = None
+    active_month: Optional[str] = None
+    available_months: List[str] = []
     total_savings: float
     savings_rate: float
     emergency_fund_progress: Optional[dict] = None
@@ -211,6 +216,9 @@ class DashboardSummaryResponse(BaseModel):
     expense_by_category: List[CategoryExpense]
     income_vs_expense_trend: List[TrendPoint]
     goals_progress: List[GoalResponse]
+
+class BulkDeleteTransactionsRequest(BaseModel):
+    transaction_ids: List[str]
 
 # --- AI & Chat Schemas ---
 class ChatRequest(BaseModel):
@@ -226,6 +234,25 @@ class ChatResponse(BaseModel):
     conversation_id: str
     message: str
     citations: List[SourceCitationSchema] = []
+
+class MessageItemResponse(BaseModel):
+    id: str
+    role: str
+    content: str
+    created_at: datetime
+    citations: List[SourceCitationSchema] = []
+
+    class Config:
+        from_attributes = True
+
+class ConversationResponse(BaseModel):
+    id: str
+    title: Optional[str]
+    created_at: datetime
+    messages: List[MessageItemResponse] = []
+
+    class Config:
+        from_attributes = True
 
 class SpendingInsightResponse(BaseModel):
     insights: List[str]
