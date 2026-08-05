@@ -74,6 +74,10 @@ const ProtectedLayout = () => {
     return <Navigate to="/login" replace />;
   }
 
+  // return (
+  // <div className="app-container">
+  //   <Sidebar />
+  //   <main className="main-content">
   return (
     <div className="app-container">
       {/* Mobile Top Header */}
@@ -84,7 +88,7 @@ const ProtectedLayout = () => {
           </div>
           <h2 style={{ fontSize: '1.05rem', color: '#fff', margin: 0 }}>FinAssist AI</h2>
         </div>
-        <button 
+        <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="mobile-menu-btn"
           aria-label="Toggle Navigation Menu"

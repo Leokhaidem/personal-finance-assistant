@@ -1,8 +1,8 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  LayoutDashboard, Landmark, FileText, CreditCard, PieChart, Target, 
+import {
+  LayoutDashboard, Landmark, FileText, CreditCard, PieChart, Target,
   Calendar, StickyNote, MessageSquare, Shield, LogOut, Wallet, X
 } from 'lucide-react';
 
@@ -17,7 +17,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
     <>
       {/* Mobile Drawer Overlay Backdrop */}
       {isOpen && (
-        <div 
+        <div
           className="sidebar-backdrop"
           onClick={onClose}
         />
@@ -35,8 +35,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
             </div>
           </div>
           {onClose && (
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="btn btn-secondary mobile-close-btn"
               style={{ padding: '0.4rem', borderRadius: '8px' }}
             >
