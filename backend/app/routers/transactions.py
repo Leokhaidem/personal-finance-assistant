@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.models import User, Transaction, Account, TransactionType
-from app.schemas.schemas import TransactionCreate, TransactionUpdate, TransactionResponse
+from app.schemas.schemas import TransactionCreate, TransactionUpdate, TransactionResponse, BulkDeleteTransactionsRequest
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -92,6 +92,47 @@ async def delete_transaction(
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
+    # Revert account balance
+    acc_stmt = select(Account).where(and_(Account.id == tx.account_id, Account.user_id == current_user.id))
+    acc = (await db.execute(acc_stmt)).scalar_one_or_none()
+    if acc:
+        if tx.type == TransactionType.INCOME:
+            acc.balance -= tx.amount
+        else:
+            acc.balance += tx.amount
+
     await db.delete(tx)
     await db.commit()
     return None
+
+@router.post("/bulk-delete")
+async def bulk_delete_transactions(
+    req: BulkDeleteTransactionsRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not req.transaction_ids:
+        return {"deleted_count": 0}
+
+    stmt = select(Transaction).where(and_(Transaction.id.in_(req.transaction_ids), Transaction.user_id == current_user.id))
+    txs = (await db.execute(stmt)).scalars().all()
+
+    # Pre-fetch affected accounts
+    account_ids = {t.account_id for t in txs if t.account_id}
+    acc_stmt = select(Account).where(and_(Account.id.in_(account_ids), Account.user_id == current_user.id))
+    accounts = (await db.execute(acc_stmt)).scalars().all()
+    account_map = {a.id: a for a in accounts}
+
+    deleted_count = 0
+    for tx in txs:
+        acc = account_map.get(tx.account_id)
+        if acc:
+            if tx.type == TransactionType.INCOME:
+                acc.balance -= tx.amount
+            else:
+                acc.balance += tx.amount
+        await db.delete(tx)
+        deleted_count += 1
+
+    await db.commit()
+    return {"deleted_count": deleted_count}

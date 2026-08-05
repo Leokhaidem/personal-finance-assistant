@@ -42,6 +42,14 @@ async def upload_document(
     # Queue background text extraction and vector embedding
     background_tasks.add_task(process_and_index_document, db, doc.id, content)
 
+    # Attempt automatic transaction extraction from uploaded PDF
+    try:
+        extracted = await extract_transactions_from_pdf_bytes(content)
+        doc.extracted_transactions = extracted
+    except Exception as exc:
+        print(f"Error auto-extracting transactions during upload: {exc}")
+        doc.extracted_transactions = []
+
     return doc
 
 @router.post("/parse-pdf-direct", response_model=List[ExtractedTransactionItem])
