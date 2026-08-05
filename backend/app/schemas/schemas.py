@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date as Date
 from typing import Optional, List, Any
 from pydantic import BaseModel, EmailStr, Field, model_validator
 from app.models.models import UserRole, AccountType, TransactionType, DocumentStatus, MessageRole
@@ -60,7 +60,7 @@ class TransactionCreate(BaseModel):
     amount: float = Field(..., gt=0)
     category: str = Field(..., min_length=1)
     description: Optional[str] = None
-    date: date
+    date: Date
     type: TransactionType
 
 class TransactionUpdate(BaseModel):
@@ -68,7 +68,7 @@ class TransactionUpdate(BaseModel):
     amount: Optional[float] = None
     category: Optional[str] = None
     description: Optional[str] = None
-    date: Optional[date] = None
+    date: Optional[Date] = None
     type: Optional[TransactionType] = None
 
 class TransactionResponse(BaseModel):
@@ -78,7 +78,7 @@ class TransactionResponse(BaseModel):
     amount: float
     category: str
     description: Optional[str] = None
-    date: date
+    date: Date
     type: TransactionType
 
     class Config:
@@ -109,13 +109,13 @@ class GoalCreate(BaseModel):
     name: str = Field(..., min_length=1)
     target_amount: float = Field(..., gt=0)
     saved_amount: float = 0.0
-    target_date: date
+    target_date: Date
 
 class GoalUpdate(BaseModel):
     name: Optional[str] = None
     target_amount: Optional[float] = None
     saved_amount: Optional[float] = None
-    target_date: Optional[date] = None
+    target_date: Optional[Date] = None
 
 class GoalResponse(BaseModel):
     id: str
@@ -123,7 +123,7 @@ class GoalResponse(BaseModel):
     name: str
     target_amount: float
     saved_amount: float
-    target_date: date
+    target_date: Date
 
     class Config:
         from_attributes = True
@@ -132,14 +132,14 @@ class GoalResponse(BaseModel):
 class BillCreate(BaseModel):
     name: str = Field(..., min_length=1)
     amount: float = Field(..., gt=0)
-    due_date: date
+    due_date: Date
     recurring: bool = True
     category: str = "Utilities"
 
 class BillUpdate(BaseModel):
     name: Optional[str] = None
     amount: Optional[float] = None
-    due_date: Optional[date] = None
+    due_date: Optional[Date] = None
     recurring: Optional[bool] = None
     category: Optional[str] = None
 
@@ -148,12 +148,19 @@ class BillResponse(BaseModel):
     user_id: str
     name: str
     amount: float
-    due_date: date
+    due_date: Date
     recurring: bool
     category: str
 
     class Config:
         from_attributes = True
+
+class ExtractedTransactionItem(BaseModel):
+    date: str
+    description: str
+    amount: float = Field(..., gt=0)
+    type: TransactionType = TransactionType.EXPENSE
+    category: str = "Uncategorized"
 
 # --- Document Schemas ---
 class DocumentResponse(BaseModel):
@@ -269,12 +276,7 @@ class GoalFeasibilityResponse(BaseModel):
     ai_explanation: str
 
 # --- PDF Statement Extraction Schemas ---
-class ExtractedTransactionItem(BaseModel):
-    date: str
-    description: str
-    amount: float = Field(..., gt=0)
-    type: TransactionType = TransactionType.EXPENSE
-    category: str = "Uncategorized"
+
 
 class ConfirmTransactionsRequest(BaseModel):
     account_id: str
