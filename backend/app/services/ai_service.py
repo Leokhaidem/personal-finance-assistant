@@ -3,13 +3,17 @@ from datetime import date
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.models.models import (
     Account, Transaction, Budget, Goal, Bill, Note, Document, Chunk, Conversation, Message, SourceCitation,
     TransactionType, MessageRole
 )
-from app.schemas.schemas import SourceCitationSchema, ChatResponse, SpendingInsightResponse, GoalFeasibilityResponse
+from app.schemas.schemas import (
+    SourceCitationSchema, ChatResponse, SpendingInsightResponse, GoalFeasibilityResponse,
+    ConversationResponse, MessageItemResponse
+)
 from app.services.vector_service import get_vector_service
 
 # Prompt Template per specification
@@ -31,6 +35,9 @@ Upcoming Bills:
 
 Category Budgets:
 {budgets_str}
+
+Recent Transactions:
+{transactions_str}
 
 === RETRIEVED DOCUMENTS & NOTES CONTEXT ===
 {retrieved_chunks_str}
@@ -71,6 +78,14 @@ async def build_structured_context(db: AsyncSession, user_id: str) -> Dict[str, 
     budgets = (await db.execute(select(Budget).where(and_(Budget.user_id == user_id, Budget.month == current_month_str)))).scalars().all()
     budgets_str = "\n".join([f"- {b.category}: Limit ₹{b.monthly_limit:,.2f}" for b in budgets]) or "None"
 
+    # Recent Transactions
+    tx_stmt = select(Transaction).where(Transaction.user_id == user_id).order_by(Transaction.date.desc()).limit(20)
+    recent_txs = (await db.execute(tx_stmt)).scalars().all()
+    transactions_str = "\n".join([
+        f"- {tx.date} | {tx.type.value.upper()}: ₹{tx.amount:,.2f} ({tx.category}) - {tx.description or 'No description'}"
+        for tx in recent_txs
+    ]) or "None"
+
     return {
         "income": inc,
         "expenses": exp,
@@ -79,13 +94,88 @@ async def build_structured_context(db: AsyncSession, user_id: str) -> Dict[str, 
         "goals_str": goals_str,
         "bills_str": bills_str,
         "budgets_str": budgets_str,
+        "transactions_str": transactions_str,
         "goals_list": goals,
         "bills_list": bills,
         "budgets_list": budgets,
     }
 
-async def call_gemini_llm(prompt: str) -> str:
-    """Invoke Gemini API (or Google GenAI SDK / LangChain) with fallback if key is missing."""
+def build_smart_fallback_response(struct_ctx: Dict[str, Any], question: str, retrieved_chunks_str: str) -> str:
+    q_lower = question.lower()
+    income = struct_ctx.get("income", 0.0)
+    expenses = struct_ctx.get("expenses", 0.0)
+    savings = struct_ctx.get("total_savings", 0.0)
+    accounts = struct_ctx.get("accounts_str", "None")
+    goals = struct_ctx.get("goals_str", "None")
+    bills = struct_ctx.get("bills_str", "None")
+    budgets = struct_ctx.get("budgets_str", "None")
+    txs = struct_ctx.get("transactions_str", "None")
+
+    lines = ["**Financial Assistant Snapshot & Analysis**\n"]
+
+    if "income" in q_lower:
+        lines.append(f"• **Monthly Income**: ₹{income:,.2f} (based on transactions this month)")
+        if expenses > 0:
+            lines.append(f"• **Monthly Expenses**: ₹{expenses:,.2f}")
+            lines.append(f"• **Net Surplus**: ₹{(income - expenses):,.2f}")
+
+    elif "expense" in q_lower or "spend" in q_lower or "spent" in q_lower:
+        lines.append(f"• **Monthly Expenses**: ₹{expenses:,.2f}")
+        lines.append(f"• **Monthly Income**: ₹{income:,.2f}")
+        if budgets != "None":
+            lines.append(f"\n**Category Budgets:**\n{budgets}")
+
+    elif "transaction" in q_lower or "recent" in q_lower or "history" in q_lower:
+        lines.append(f"\n**Recent Transactions:**\n{txs}")
+
+    elif "saving" in q_lower or "balance" in q_lower or "account" in q_lower or "money" in q_lower:
+        lines.append(f"• **Total Savings / Balances**: ₹{savings:,.2f}")
+        lines.append(f"\n**Account Balances:**\n{accounts}")
+
+    elif "goal" in q_lower or "vacation" in q_lower or "afford" in q_lower:
+        lines.append(f"• **Total Savings**: ₹{savings:,.2f}")
+        lines.append(f"• **Monthly Surplus**: ₹{max(0.0, income - expenses):,.2f}")
+        lines.append(f"\n**Active Goals:**\n{goals}")
+
+    elif "bill" in q_lower or "due" in q_lower or "payment" in q_lower:
+        lines.append(f"\n**Upcoming Bills:**\n{bills}")
+
+    else:
+        lines.append(f"Here is a summary of your financial snapshot:")
+        lines.append(f"• **Monthly Income**: ₹{income:,.2f}")
+        lines.append(f"• **Monthly Expenses**: ₹{expenses:,.2f}")
+        lines.append(f"• **Total Savings**: ₹{savings:,.2f}")
+        if accounts != "None":
+            lines.append(f"\n**Accounts:**\n{accounts}")
+        if goals != "None":
+            lines.append(f"\n**Active Goals:**\n{goals}")
+        if bills != "None":
+            lines.append(f"\n**Upcoming Bills:**\n{bills}")
+
+    if retrieved_chunks_str and "No relevant text" not in retrieved_chunks_str:
+        lines.append(f"\n**Retrieved Relevant PDF / Document Context:**\n{retrieved_chunks_str.strip()}")
+
+    lines.append("\n*Disclaimer: Generated for informational purposes based on your financial records.*")
+    return "\n".join(lines)
+
+def _extract_text_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, dict) and "text" in block and block.get("type") != "thinking":
+                parts.append(block.get("text", ""))
+            elif hasattr(block, "text") and getattr(block, "type", "") != "thinking":
+                parts.append(block.text)
+        if parts:
+            return "\n\n".join(parts)
+    return str(content)
+
+async def call_gemini_llm(prompt: str, fallback_response: Optional[str] = None) -> str:
+    """Invoke Gemini API (google-genai SDK first, LangChain as fallback) — mirrors the known-working implementation."""
     api_key = settings.GEMINI_API_KEY
     model_name = settings.GEMINI_MODEL or "gemini-3-flash-preview"
 
@@ -101,20 +191,29 @@ async def call_gemini_llm(prompt: str) -> str:
             if response and response.text:
                 return response.text
         except Exception as e:
+            print(f"Google GenAI Client error: {e}")
             try:
-                # Fallback to langchain_google_genai or google.generativeai
+                # Fallback to langchain_google_genai
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 llm = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key)
                 res = llm.invoke(prompt)
-                return res.content
+                if res and res.content:
+                    text = _extract_text_content(res.content)
+                    if text:
+                        return text
             except Exception as e2:
                 print(f"Gemini API invocation error: {e2}")
 
+    # Use the caller-supplied smart fallback if one was given
+    if fallback_response:
+        return fallback_response
+
     # Smart local fallback response if no API key provided or API error occurs
+    question_part = prompt.split('=== USER QUESTION ===')[-1].strip() if '=== USER QUESTION ===' in prompt else prompt
     return (
         f"[Financial Assistant Response]\n"
         f"Based on your financial snapshot and records, here is an analysis of your request:\n"
-        f"{prompt.split('=== USER QUESTION ===')[-1].strip()}\n\n"
+        f"{question_part}\n\n"
         f"Key details reviewed:\n"
         f"- Monthly Income vs Expense ratio & Account Balances\n"
         f"- Active Savings Goals & Upcoming Bill Commitments\n"
@@ -168,7 +267,7 @@ async def handle_ai_chat(
                 snippet=f"Bill '{b.name}': ₹{b.amount:,.2f} due {b.due_date}"
             ))
 
-    # 3. Build Prompt
+    # 3. Build Prompt & Smart Fallback
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
         income=struct_ctx["income"],
         expenses=struct_ctx["expenses"],
@@ -177,12 +276,15 @@ async def handle_ai_chat(
         goals_str=struct_ctx["goals_str"],
         bills_str=struct_ctx["bills_str"],
         budgets_str=struct_ctx["budgets_str"],
+        transactions_str=struct_ctx["transactions_str"],
         retrieved_chunks_str=retrieved_chunks_str,
         question=question
     )
 
-    # 4. Call Gemini LLM
-    answer_text = await call_gemini_llm(prompt)
+    smart_fallback = build_smart_fallback_response(struct_ctx, question, retrieved_chunks_str)
+
+    # 4. Call Gemini LLM (or use smart fallback if unauthenticated/offline)
+    answer_text = await call_gemini_llm(prompt, fallback_response=smart_fallback)
 
     # 5. Persist Conversation & Messages
     if not conversation_id:
@@ -258,7 +360,7 @@ async def analyze_goal_feasibility(db: AsyncSession, user_id: str, goal_id: str)
 
     today = date.today()
     remaining_amount = max(0.0, goal.target_amount - goal.saved_amount)
-    
+
     # Calculate months remaining
     days_left = (goal.target_date - today).days
     months_remaining = max(1.0, days_left / 30.44)
@@ -301,3 +403,85 @@ async def analyze_goal_feasibility(db: AsyncSession, user_id: str, goal_id: str)
         is_feasible=is_feasible,
         ai_explanation=ai_explanation
     )
+
+async def get_user_conversations(db: AsyncSession, user_id: str) -> List[ConversationResponse]:
+    stmt = (
+        select(Conversation)
+        .where(Conversation.user_id == user_id)
+        .options(selectinload(Conversation.messages).selectinload(Message.citations))
+        .order_by(Conversation.created_at.desc())
+    )
+    res = await db.execute(stmt)
+    convs = res.scalars().all()
+
+    result = []
+    for c in convs:
+        msg_list = []
+        for m in c.messages:
+            cite_list = [
+                SourceCitationSchema(
+                    source_type=sc.source_type,
+                    source_id=sc.source_id,
+                    snippet=sc.snippet
+                ) for sc in m.citations
+            ]
+            role_str = m.role.value if isinstance(m.role, MessageRole) else str(m.role)
+            msg_list.append(MessageItemResponse(
+                id=m.id,
+                role=role_str,
+                content=m.content,
+                created_at=m.created_at,
+                citations=cite_list
+            ))
+        result.append(ConversationResponse(
+            id=c.id,
+            title=c.title,
+            created_at=c.created_at,
+            messages=msg_list
+        ))
+    return result
+
+async def get_conversation_with_messages(db: AsyncSession, user_id: str, conversation_id: str) -> Optional[ConversationResponse]:
+    stmt = (
+        select(Conversation)
+        .where(and_(Conversation.id == conversation_id, Conversation.user_id == user_id))
+        .options(selectinload(Conversation.messages).selectinload(Message.citations))
+    )
+    res = await db.execute(stmt)
+    c = res.scalar_one_or_none()
+    if not c:
+        return None
+
+    msg_list = []
+    for m in c.messages:
+        cite_list = [
+            SourceCitationSchema(
+                source_type=sc.source_type,
+                source_id=sc.source_id,
+                snippet=sc.snippet
+            ) for sc in m.citations
+        ]
+        role_str = m.role.value if isinstance(m.role, MessageRole) else str(m.role)
+        msg_list.append(MessageItemResponse(
+            id=m.id,
+            role=role_str,
+            content=m.content,
+            created_at=m.created_at,
+            citations=cite_list
+        ))
+    return ConversationResponse(
+        id=c.id,
+        title=c.title,
+        created_at=c.created_at,
+        messages=msg_list
+    )
+
+async def delete_user_conversation(db: AsyncSession, user_id: str, conversation_id: str) -> bool:
+    stmt = select(Conversation).where(and_(Conversation.id == conversation_id, Conversation.user_id == user_id))
+    res = await db.execute(stmt)
+    conv = res.scalar_one_or_none()
+    if not conv:
+        return False
+    await db.delete(conv)
+    await db.commit()
+    return True

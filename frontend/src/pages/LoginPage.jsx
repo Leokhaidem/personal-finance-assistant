@@ -117,7 +117,12 @@ export const LoginPage = () => {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid email or password');
+      setError(
+        err.response?.data?.detail || 
+        (!err.response || err.code === 'ERR_NETWORK'
+          ? 'Unable to reach backend server. Please ensure backend is running on http://127.0.0.1:8000'
+          : 'Invalid email or password.')
+      );
     } finally {
       setLoading(false);
     }

@@ -56,15 +56,24 @@ export const DocumentsPage = () => {
     formData.append('file', file);
 
     try {
-      await apiClient.post('/documents/upload', formData, {
+      const res = await apiClient.post('/documents/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setSuccessMsg(`Document "${file.name}" uploaded successfully! PyMuPDF text extraction & vector indexing in progress.`);
+
+      if (res.data?.extracted_transactions && res.data.extracted_transactions.length > 0) {
+        setExtractedTxs(res.data.extracted_transactions);
+        const initialSelected = {};
+        res.data.extracted_transactions.forEach((_, idx) => { initialSelected[idx] = true; });
+        setSelectedTxIndexes(initialSelected);
+        setShowPreviewModal(true);
+      }
       fetchData();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to upload PDF document.');
     } finally {
       setUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -73,7 +82,7 @@ export const DocumentsPage = () => {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Only PDF bank/credit card statements are supported.');
+      setError('Only PDF bank/credit card statements & financial bills are supported.');
       return;
     }
 
@@ -90,26 +99,26 @@ export const DocumentsPage = () => {
     formData.append('file', file);
 
     try {
-      // 1. Upload for document storage & RAG
+      // 1. Upload for document storage & RAG indexing
       apiClient.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).catch(() => {});
 
-      // 2. Parse transactions semantically via Gemini AI
+      // 2. Parse transactions semantically via AI / Heuristic engine
       const res = await apiClient.post('/documents/parse-pdf-direct', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       if (!res.data || res.data.length === 0) {
-        setError('No transaction entries could be extracted from this PDF. Please check the document or format.');
+        setError('No transaction entries or bill totals could be extracted from this PDF. Please verify document content.');
       } else {
         setExtractedTxs(res.data);
-        // Default select all transactions
         const initialSelected = {};
         res.data.forEach((_, idx) => { initialSelected[idx] = true; });
         setSelectedTxIndexes(initialSelected);
         setShowPreviewModal(true);
       }
+      fetchData();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to parse statement PDF using AI.');
+      setError(err.response?.data?.detail || 'Failed to parse statement PDF.');
     } finally {
       setParsing(false);
       e.target.value = '';
@@ -148,7 +157,7 @@ export const DocumentsPage = () => {
       });
 
       setShowPreviewModal(false);
-      setSuccessMsg(`Successfully imported ${res.data.imported_count} transaction(s) into "${res.data.account_name}". Updated Balance: ₹${res.data.new_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.`);
+      setSuccessMsg(`Successfully imported ${res.data.imported_count} transaction(s) into "${res.data.account_name}". Updated Account Balance: ₹${res.data.new_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. Dashboard Money Overview & Monthly Income updated!`);
       fetchData();
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to import transactions.');
@@ -172,7 +181,7 @@ export const DocumentsPage = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Financial Documents & Statement Extractor</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
@@ -220,47 +229,27 @@ export const DocumentsPage = () => {
         </div>
       </div>
 
-      {/* File Upload Grid */}
-      <div className="grid-2" style={{ marginBottom: '2rem' }}>
-        {/* Statement Transaction Extractor Box */}
-        <div className="glass-card" style={{ border: '2px dashed var(--accent-primary)', textAlign: 'center', padding: '2rem', position: 'relative', background: 'rgba(99,102,241,0.03)' }}>
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={handleStatementExtractUpload}
-            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-            disabled={parsing}
-          />
-          <div style={{ display: 'inline-flex', background: 'rgba(99,102,241,0.15)', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
-            <Sparkles size={32} color="var(--accent-primary)" />
-          </div>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.4rem', color: '#fff' }}>
-            {parsing ? 'Scanning PDF & Extracting Transactions via Gemini AI...' : 'Extract Transactions from PDF Statement'}
-          </h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            Upload Bank / Credit Card PDF statement. Includes AI semantic extraction for scanned or non-standard PDFs.
-          </p>
+      {/* Unified PDF Upload Card */}
+      <div className="glass-card" style={{ border: '2px dashed var(--accent-primary)', textAlign: 'center', padding: '2.5rem', position: 'relative', background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(16,185,129,0.06))', marginBottom: '2rem' }}>
+        <input
+          type="file"
+          accept=".pdf"
+          onChange={handleFileUpload}
+          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+          disabled={uploading || parsing}
+        />
+        <div style={{ display: 'inline-flex', background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(16,185,129,0.2))', padding: '1.25rem', borderRadius: '50%', marginBottom: '1rem', border: '1px solid var(--accent-primary)' }}>
+          <Sparkles size={36} color="var(--accent-primary)" />
         </div>
-
-        {/* General Document RAG Upload Box */}
-        <div className="glass-card" style={{ border: '2px dashed var(--border-glow)', textAlign: 'center', padding: '2rem', position: 'relative' }}>
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={handleFileUpload}
-            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-            disabled={uploading}
-          />
-          <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
-            <Upload size={32} color="var(--text-secondary)" />
-          </div>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.4rem' }}>
-            {uploading ? 'Processing PDF & Extracting Text...' : 'Upload General RAG Document'}
-          </h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            Upload Insurance Terms, Tax Notes, or Receipt PDFs for AI Chat memory & vector search.
-          </p>
-        </div>
+        <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: '#fff' }}>
+          {uploading || parsing ? 'Processing PDF & Extracting Financial Data...' : 'Upload Financial Bill or Statement PDF'}
+        </h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '600px', margin: '0 auto 1rem' }}>
+          Drag & drop or click to upload PDF bank statements, utility bills, receipts, or insurance policies. Automatic AI & heuristic extraction will index text for RAG AI chat and detect line-item transactions & bill totals.
+        </p>
+        <button className="btn btn-primary" style={{ padding: '0.6rem 1.5rem', fontSize: '0.9rem', pointerEvents: 'none' }}>
+          <Upload size={18} /> Select PDF Document
+        </button>
       </div>
 
       {/* Document List */}
