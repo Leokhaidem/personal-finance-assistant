@@ -214,7 +214,8 @@ export const TransactionsPage = () => {
       return;
     }
 
-    if (!accountId) {
+    const targetAccId = accountId || (accounts.length > 0 ? accounts[0].id : '');
+    if (!targetAccId) {
       alert('Please select or create a target account first.');
       return;
     }
@@ -222,7 +223,7 @@ export const TransactionsPage = () => {
     setImporting(true);
     try {
       const res = await apiClient.post('/documents/confirm-transactions', {
-        account_id: accountId,
+        account_id: targetAccId,
         transactions: approvedTransactions
       });
 

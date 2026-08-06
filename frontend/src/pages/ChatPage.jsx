@@ -8,7 +8,7 @@ import {
   FileText,
   Trash2,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,7 +19,7 @@ export const ChatPage = () => {
       id: "welcome",
       role: "assistant",
       content:
-        "Hello! I am your personal finance assistant powered by Google Gemini AI. I analyze your account balances, monthly budgets, upcoming bills, goals, and uploaded PDF documents/notes to provide grounded recommendations. How can I assist you today?",
+        "Hello! I am your personal finance assistant. I analyze your account balances, monthly budgets, upcoming bills, goals, and uploaded PDF documents/notes to provide grounded recommendations. How can I assist you today?",
       citations: [],
     },
   ]);
@@ -111,7 +111,8 @@ export const ChatPage = () => {
 
   const handleDeleteConversation = async () => {
     if (!conversationId) return;
-    if (!window.confirm("Clear this conversation history from database?")) return;
+    if (!window.confirm("Clear this conversation history from database?"))
+      return;
     try {
       await apiClient.delete(`/chat/conversations/${conversationId}`);
       handleNewChat();
@@ -136,21 +137,44 @@ export const ChatPage = () => {
         flexDirection: "column",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "1rem",
+          flexWrap: "wrap",
+          gap: "0.5rem",
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: "1.75rem", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Sparkles size={26} color="var(--accent-primary)" /> AI Financial Assistant
+          <h1
+            style={{
+              fontSize: "1.75rem",
+              marginBottom: "0.25rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            <Sparkles size={26} color="var(--accent-primary)" /> AI Financial
+            Assistant
           </h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            Powered by Google Gemini models & grounded RAG context stored permanently in PostgreSQL database.
-          </p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button onClick={handleNewChat} className="btn btn-secondary" style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}>
+          <button
+            onClick={handleNewChat}
+            className="btn btn-secondary"
+            style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
+          >
             <RefreshCw size={14} /> New Session
           </button>
           {conversationId && (
-            <button onClick={handleDeleteConversation} className="btn btn-danger" style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}>
+            <button
+              onClick={handleDeleteConversation}
+              className="btn btn-danger"
+              style={{ fontSize: "0.82rem", padding: "0.4rem 0.85rem" }}
+            >
               <Trash2 size={14} /> Clear History
             </button>
           )}
@@ -313,7 +337,8 @@ export const ChatPage = () => {
                   fontSize: "0.9rem",
                 }}
               >
-                Gemini AI is analyzing financial SQL snapshot & ChromaDB vector context...
+                AI is analyzing financial SQL snapshot & ChromaDB vector
+                context...
               </div>
             </div>
           )}

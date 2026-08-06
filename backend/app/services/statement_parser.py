@@ -54,24 +54,55 @@ def parse_date_string(date_str: str) -> str:
         return date.today().isoformat()
     date_str = date_str.strip()
     
-    # Try YYYY-MM-DD
+    # Try YYYY-MM-DD or YYYY/MM/DD
     m = re.match(r"^(\d{4})[-/\.](\d{1,2})[-/\.](\d{1,2})$", date_str)
     if m:
-        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+        except ValueError:
+            pass
 
-    # Try DD-MM-YYYY or DD/MM/YYYY
+    # Try DD-MM-YYYY / MM-DD-YYYY or DD/MM/YYYY / MM/DD/YYYY
     m = re.match(r"^(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{4})$", date_str)
     if m:
-        return f"{int(m.group(3)):04d}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+        p1, p2, yr = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        # Differentiate MM/DD/YYYY vs DD/MM/YYYY
+        if p2 > 12 >= p1: # MM/DD/YYYY
+            try:
+                return date(yr, p1, p2).isoformat()
+            except ValueError:
+                pass
+        elif p1 > 12 >= p2: # DD/MM/YYYY
+            try:
+                return date(yr, p2, p1).isoformat()
+            except ValueError:
+                pass
+        else: # Default DD/MM/YYYY
+            try:
+                return date(yr, p2, p1).isoformat()
+            except ValueError:
+                try:
+                    return date(yr, p1, p2).isoformat()
+                except ValueError:
+                    pass
 
-    # Try DD-MM-YY or DD/MM/YY
+    # Try DD-MM-YY or MM-DD-YY
     m = re.match(r"^(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{2})$", date_str)
     if m:
-        yr = 2000 + int(m.group(3))
-        return f"{yr:04d}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+        p1, p2, yr = int(m.group(1)), int(m.group(2)), 2000 + int(m.group(3))
+        if p2 > 12 >= p1:
+            try:
+                return date(yr, p1, p2).isoformat()
+            except ValueError:
+                pass
+        else:
+            try:
+                return date(yr, p2, p1).isoformat()
+            except ValueError:
+                pass
 
     # Try DD Mon YYYY or Mon DD, YYYY
-    for fmt in ("%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y", "%b %d %Y"):
+    for fmt in ("%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y", "%b %d %Y", "%d-%b-%Y", "%d-%B-%Y"):
         try:
             dt = datetime.strptime(date_str, fmt)
             return dt.date().isoformat()

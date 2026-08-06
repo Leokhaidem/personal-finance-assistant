@@ -185,7 +185,7 @@ export const DashboardPage = () => {
       <div className="glass-card" style={{ marginBottom: '2rem', borderLeft: '4px solid var(--accent-primary)', background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(17,24,39,0.8))' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
           <Sparkles size={20} color="var(--accent-primary)" />
-          <h3 style={{ fontSize: '1.1rem' }}>Gemini AI Spending Insights</h3>
+          <h3 style={{ fontSize: '1.1rem' }}>Spending Insights</h3>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem' }}>
           {insights.map((ins, i) => (

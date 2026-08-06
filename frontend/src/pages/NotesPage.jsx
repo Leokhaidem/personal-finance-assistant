@@ -97,7 +97,7 @@ export const NotesPage = () => {
             <StickyNote size={28} color="var(--accent-primary)" /> Free-Text Financial Notes
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            Store financial notes, tax plans, & insurance policies. Automatically chunked & indexed into ChromaDB vector search for Gemini AI Chat.
+            Store financial notes, tax plans, & insurance policies.
           </p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ padding: '0.6rem 1.25rem' }}>
@@ -145,7 +145,7 @@ export const NotesPage = () => {
             <StickyNote size={48} color="var(--text-muted)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
             <h3>No Financial Notes Found</h3>
             <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', marginBottom: '1.25rem' }}>
-              Create a free-text note or select a template above to add knowledge to your Gemini AI RAG assistant.
+              Create a free-text note or select a template above to add knowledge to your assistant.
             </p>
             <button onClick={() => setShowModal(true)} className="btn btn-primary">
               <Plus size={16} /> Create First Note

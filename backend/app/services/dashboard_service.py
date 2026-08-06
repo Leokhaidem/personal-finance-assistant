@@ -36,7 +36,24 @@ async def compute_dashboard_summary(db: AsyncSession, user_id: str, month: Optio
         except ValueError:
             first_day_of_month = date(today.year, today.month, 1)
     else:
-        first_day_of_month = date(today.year, today.month, 1)
+        # Check if current month has transactions
+        curr_first = date(today.year, today.month, 1)
+        curr_end = date(today.year + 1, 1, 1) if today.month == 12 else date(today.year, today.month + 1, 1)
+        curr_tx_check = select(func.count(Transaction.id)).where(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.date >= curr_first,
+                Transaction.date < curr_end
+            )
+        )
+        curr_count = (await db.execute(curr_tx_check)).scalar_one_or_none() or 0
+
+        if curr_count > 0 or not all_dates:
+            first_day_of_month = curr_first
+        else:
+            # Default to the most recent month containing transactions
+            latest_d = all_dates[0]
+            first_day_of_month = date(latest_d.year, latest_d.month, 1)
 
     active_month_str = f"{first_day_of_month.year:04d}-{first_day_of_month.month:02d}"
     active_month_label = first_day_of_month.strftime("%B %Y")

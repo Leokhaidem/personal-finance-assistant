@@ -31,7 +31,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h2 style={{ fontSize: '1.15rem', color: '#fff' }}>FinAssist AI</h2>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Gemini RAG Engine</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>RAG Engine</span>
             </div>
           </div>
           {onClose && (

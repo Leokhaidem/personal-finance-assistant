@@ -243,7 +243,7 @@ export const GoalsPage = () => {
             </div>
 
             <div style={{ background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '10px', fontSize: '0.9rem', color: '#d1d5db', marginBottom: '1.5rem', border: '1px solid var(--border-color)' }}>
-              <b style={{ color: '#fff', display: 'block', marginBottom: '0.3rem' }}>Gemini AI Recommendation:</b>
+              <b style={{ color: '#fff', display: 'block', marginBottom: '0.3rem' }}>AI Recommendation:</b>
               {feasibilityResult.ai_explanation}
             </div>
 

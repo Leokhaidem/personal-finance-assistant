@@ -148,16 +148,21 @@ export const DocumentsPage = () => {
       return;
     }
 
+    const targetAccId = selectedAccountId || (accounts.length > 0 ? accounts[0].id : '');
+    if (!targetAccId) {
+      alert('Please select or create a target account to link extracted transactions.');
+      return;
+    }
+
     setImporting(true);
     try {
-      const targetAcc = accounts.find((a) => a.id === selectedAccountId);
       const res = await apiClient.post('/documents/confirm-transactions', {
-        account_id: selectedAccountId,
+        account_id: targetAccId,
         transactions: approvedTransactions
       });
 
       setShowPreviewModal(false);
-      setSuccessMsg(`Successfully imported ${res.data.imported_count} transaction(s) into "${res.data.account_name}". Updated Account Balance: ₹${res.data.new_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. Dashboard Money Overview & Monthly Income updated!`);
+      setSuccessMsg(`Successfully imported ${res.data.imported_count} transaction(s) into "${res.data.account_name}". Updated Account Balance: ₹${res.data.new_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. Dashboard Money Overview & Expenses updated!`);
       fetchData();
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to import transactions.');
