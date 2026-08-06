@@ -405,10 +405,8 @@ export const TransactionsPage = () => {
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleSelectTx(tx.id);
-                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleSelectTx(tx.id)}
                           style={{ cursor: 'pointer', width: '18px', height: '18px', accentColor: 'var(--accent-primary)' }}
                         />
                       </td>
@@ -609,6 +607,7 @@ export const TransactionsPage = () => {
                         <input
                           type="checkbox"
                           checked={!!selectedTxIndexes[idx]}
+                          onClick={(e) => e.stopPropagation()}
                           onChange={() => toggleSelectTxIndex(idx)}
                           style={{ cursor: 'pointer' }}
                         />
