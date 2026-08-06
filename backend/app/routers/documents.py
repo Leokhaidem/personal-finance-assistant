@@ -40,7 +40,7 @@ async def upload_document(
     await db.refresh(doc)
 
     # Queue background text extraction and vector embedding
-    background_tasks.add_task(process_and_index_document, db, doc.id, content)
+    background_tasks.add_task(process_and_index_document, doc.id, content)
 
     # Attempt automatic transaction extraction from uploaded PDF
     try:

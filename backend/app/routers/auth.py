@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
     get_password_hash, verify_password, create_access_token, create_refresh_token, get_current_user
@@ -70,11 +71,11 @@ async def login(
     access_token = create_access_token(data={"sub": user.id, "role": user.role.value})
     refresh_token = create_refresh_token(data={"sub": user.id})
 
-    # Save refresh token in DB
+    # Save refresh token in DB with proper expiry delta
     ref_row = RefreshToken(
         user_id=user.id,
         token_hash=refresh_token[-32:],
-        expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
+        expires_at=(datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)).replace(tzinfo=None)
     )
     db.add(ref_row)
     await db.commit()

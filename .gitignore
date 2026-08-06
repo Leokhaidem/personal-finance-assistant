@@ -54,4 +54,5 @@ backend/.env
 *.db
 *.sqlite
 *.sqlite3
+_migration_temp.db
 finance.db

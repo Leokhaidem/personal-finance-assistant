@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.core.database import AsyncSessionLocal, engine, Base
+from app.core.database import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.models.models import (
     User, UserRole, Account, AccountType, Transaction, TransactionType,
@@ -18,9 +18,6 @@ from app.services.vector_service import get_vector_service
 from app.services.document_service import split_document_text
 
 async def seed_data():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     async with AsyncSessionLocal() as db:
         # 1. Create Users
         demo_user = (await db.execute(select(User).where(User.email == "user@example.com"))).scalar_one_or_none()

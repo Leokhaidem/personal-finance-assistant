@@ -47,7 +47,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
-    role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
+    role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole, values_callable=lambda obj: [e.value for e in obj]), default=UserRole.USER, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -90,7 +90,7 @@ class Document(Base):
     content_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     num_pages: Mapped[int] = mapped_column(Integer, default=1)
-    status: Mapped[DocumentStatus] = mapped_column(SQLEnum(DocumentStatus), default=DocumentStatus.PENDING)
+    status: Mapped[DocumentStatus] = mapped_column(SQLEnum(DocumentStatus, values_callable=lambda obj: [e.value for e in obj]), default=DocumentStatus.PENDING)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="documents")
@@ -120,7 +120,7 @@ class Account(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid_str)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    type: Mapped[AccountType] = mapped_column(SQLEnum(AccountType), default=AccountType.BANK)
+    type: Mapped[AccountType] = mapped_column(SQLEnum(AccountType, values_callable=lambda obj: [e.value for e in obj]), default=AccountType.BANK)
     balance: Mapped[float] = mapped_column(Float, default=0.0)
 
     user = relationship("User", back_populates="accounts")
@@ -137,7 +137,7 @@ class Transaction(Base):
     category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    type: Mapped[TransactionType] = mapped_column(SQLEnum(TransactionType), nullable=False)
+    type: Mapped[TransactionType] = mapped_column(SQLEnum(TransactionType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
 
     user = relationship("User", back_populates="transactions")
     account = relationship("Account", back_populates="transactions")
@@ -232,7 +232,7 @@ class Message(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid_str)
     conversation_id: Mapped[str] = mapped_column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
-    role: Mapped[MessageRole] = mapped_column(SQLEnum(MessageRole), nullable=False)
+    role: Mapped[MessageRole] = mapped_column(SQLEnum(MessageRole, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

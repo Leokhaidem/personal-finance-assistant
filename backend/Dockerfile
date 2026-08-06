@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 # Show Python logs immediately
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -32,8 +33,5 @@ COPY . .
 # Create Chroma directory
 RUN mkdir -p /app/chroma_db
 
-# Expose FastAPI port
-EXPOSE 8000
-
-# Start FastAPI
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+ENTRYPOINT ["python", "scripts/entrypoint.py"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

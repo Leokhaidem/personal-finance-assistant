@@ -5,10 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.core.database import engine, Base
 
-# Import models so SQLAlchemy registers all tables
-from app.models.models import *
+# Import models module so SQLAlchemy registers all tables
+from app.models import models
 
 from app.routers import (
     auth, documents, accounts, transactions, budgets, goals, bills, notes, dashboard, chat, admin
@@ -19,11 +18,7 @@ logger = logging.getLogger("finance_app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB tables on startup
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    logger.info("Database tables initialized successfully.")
+    logger.info("Application startup complete.")
     yield
 
 app = FastAPI(
@@ -35,7 +30,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,7 +42,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "detail": str(exc),
+            "detail": "An internal server error occurred.",
             "path": str(request.url.path)
         }
     )
